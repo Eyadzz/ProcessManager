@@ -2,12 +2,16 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 
 public class ProcessManager {
     private String processLineInfo;
-    private String[] cmd = {"cmd.exe", "/c", "tasklist | sort"};
+    private String[] cmd = {"cmd.exe", "/c", "tasklist /FO csv | sort"};
     private BufferedReader processList;
     private ArrayList<String> ignoreList = new ArrayList<>();
+    private ArrayList<String> afterKill = new ArrayList<>();
 
     private BufferedReader getProcessList() throws IOException {
         Process p = Runtime.getRuntime().exec(cmd);
@@ -16,7 +20,7 @@ public class ProcessManager {
     }
 
     private String getExectuableProcess(BufferedReader processList) throws IOException {
-        while (!processLineInfo.contains(".exe"))
+        while (!processLineInfo.contains(".exe") && !processLineInfo.contains(".EXE"))
             processLineInfo = processList.readLine();
         return processLineInfo;
     }
@@ -26,7 +30,8 @@ public class ProcessManager {
         processLineInfo = processList.readLine();
         while (true) {
             processLineInfo = getExectuableProcess(processList);
-            String programName = processLineInfo.substring(0, processLineInfo.indexOf(".exe"));
+            String[] arr = processLineInfo.split(",");
+            String programName = arr[0].replaceAll("\"", "");
             ArrayList<String> singleProgramProcesses = getSingleProgramProcesses(programName);
             executeTaskKill(singleProgramProcesses);
             singleProgramProcesses.clear();
@@ -39,7 +44,7 @@ public class ProcessManager {
         boolean isService = false;
         ArrayList<String> singleProgramProcesses = new ArrayList<>();
         while (processLineInfo.contains(programName)) {
-            singleProgramProcesses.add(processLineInfo);
+            singleProgramProcesses.add(programName);
             if (processLineInfo.contains("Services")) {
                 isService = true;
             }
@@ -47,8 +52,7 @@ public class ProcessManager {
             if (processLineInfo == null)
                 return singleProgramProcesses;
         }
-        if(isService)
-        {
+        if (isService) {
             singleProgramProcesses.clear();
         }
         return singleProgramProcesses;
@@ -56,40 +60,55 @@ public class ProcessManager {
 
     private void executeTaskKill(ArrayList<String> singleProgramProcesses) throws IOException {
         for (int i = 0; i < singleProgramProcesses.size(); i++) {
-            String process = singleProgramProcesses.get(i).substring(0, singleProgramProcesses.get(i).indexOf(".exe")) + ".exe";
+            String process = singleProgramProcesses.get(i);
             Runtime rt = Runtime.getRuntime();
-            if(!checkIgnoreList(process)) {
+            if (!checkIgnoreList(process)) {
                 rt.exec("taskkill /f /im " + process);
-                System.out.println("KIlled " + process);
-            }
-            else {
+                //System.out.println("KIlled " + process);
+            } else {
                 break;
             }
         }
     }
 
-    private boolean checkIgnoreList(String processName)
-    {
+    private boolean checkIgnoreList(String processName) {
         return ignoreList.contains(processName);
     }
 
-    public void addToIgnoreList(ArrayList<String> programNames)
-    {
+    public void addToIgnoreList(ArrayList<String> programNames) {
         ignoreList.addAll(programNames);
     }
-    public void clearIgnoreList(){
+
+    public void clearIgnoreList() {
         ignoreList.clear();
     }
-    public void removeFromIgnoreListByName(String programName){
+
+    public void removeFromIgnoreListByName(String programName) {
         ignoreList.remove(new String(programName));
     }
-}
-/*
 
-1- UI
-2- Documentation
-3- Readme
-4- Restrict user usage
-5- Link tool with website
-6- Make tool unkillable
- */
+    public void monitorActivity() throws IOException, InterruptedException {
+        TimeUnit.SECONDS.sleep(1);
+        while (true) {
+            ArrayList<String> result = new ArrayList<>();
+            processList = getProcessList();
+            processLineInfo = processList.readLine();
+            while (true) {
+                processLineInfo = getExectuableProcess(processList);
+                String[] arr = processLineInfo.split(",");
+                String programName = arr[0].replaceAll("\"", "");
+                System.out.println(arr[0]);
+                if (programName.equals("Taskmgr.exe")) {
+                    TimeUnit.SECONDS.sleep(1);
+                    String[] cmd = {"cmd.exe", "/c", "start explorer.exe"};
+                    Runtime rt = Runtime.getRuntime();
+                    rt.exec(cmd);
+                    return;
+                }
+                processLineInfo = processList.readLine();
+                if (processLineInfo == null)
+                    break;
+            }
+        }
+    }
+}
